@@ -24,14 +24,14 @@ class SimpleOperator(bpy.types.Operator):
 
     def execute(self, context):
         # the code that the button executes
-        run_timer()
+        run_screenshot_timer()
         running = bpy.app.timers.is_registered(check_focus)
         report = "" if running else "NOT "
         report = "Screenshot is " + report + "running"
         self.report({'INFO'}, report )
         return {'FINISHED'}
 
-def run_timer():
+def run_screenshot_timer():
     running = bpy.app.timers.is_registered(check_focus)
     if (running):
         bpy.app.timers.unregister(check_focus)
@@ -39,7 +39,46 @@ def run_timer():
         bpy.app.timers.register(check_focus)
     running = bpy.app.timers.is_registered(check_focus)
     
+# Define the function
+class VideoTimelapse(bpy.types.Operator):
+    """Tooltip"""
+    bl_idname = "object.video_timelapse"
+    bl_label = "Video Timelapse Generator"
 
+    def execute(self, context):
+        # the code that the button executes
+        make_timelapse(path)
+        self.report({'INFO'}, 'timelapse completed' )
+        return {'FINISHED'}
+
+def make_timelapse(directory):
+    if "Video Editing" in bpy.data.workspaces.keys():
+        bpy.context.window.workspace = bpy.data.workspaces['Video Editing']
+    elif bpy.context.workspace.name != "Video Editing":
+        video_editor_ws_path = next(
+            bpy.utils.app_template_paths()) + '/Video_Editing' + '/startup.blend'
+        bpy.ops.workspace.append_activate(
+            idname="Video Editing", filepath=str(video_editor_ws_path))
+            
+    screenshots = set(os.listdir(directory))
+    png_files = [filename for filename in os.listdir(directory) if filename.endswith(".png")]
+    
+    # Create strip
+    timelapse_strip = bpy.context.scene.sequence_editor.sequences.new_image(
+        name="Timelapse Sequence",
+        filepath=path,
+        channel=1,
+        frame_start=1,
+        frame_end=len(png_files),
+        fit_method='FIT'
+    )
+    
+    for image in png_files:
+        timelapse_strip.elements.append(image)
+    
+    # https://blender.stackexchange.com/questions/106659/change-encoding-settings-through-python-api
+    
+    return {'FINISHED'}
 
 # Define the panel
 class SimplePanel(bpy.types.Panel):
@@ -56,22 +95,16 @@ class SimplePanel(bpy.types.Panel):
 
         # Add a button that calls the function
         layout.operator(SimpleOperator.bl_idname, text="Toggle Auto Screenshot")
+        layout.operator(VideoTimelapse.bl_idname, text="Make Video")
 
 def register():
     bpy.utils.register_class(SimpleOperator)
+    bpy.utils.register_class(VideoTimelapse)
     bpy.utils.register_class(SimplePanel)
 
 def unregister():
     bpy.utils.unregister_class(SimpleOperator)
     bpy.utils.unregister_class(SimplePanel)
-
-# The function that runs the script
-def run_script():
-    # The code you want to execute
-    extension = ".png"
-
-    file_path = path + str(counter) + extension
-    bpy.ops.screen.screenshot(filepath=file_path)
 
 # The function that checks the focus
 def check_focus():
@@ -82,10 +115,17 @@ def check_focus():
     # Get the handle of the current window
     blender_is_active = blender_id == active_window()
     if blender_is_active:
-        run_script()
+        take_screenshot()
         counter += 1
 
     return interval
+
+def take_screenshot():
+    extension = ".png"
+
+    file_path = path + str(counter) + extension
+    bpy.ops.screen.screenshot(filepath=file_path)
+
 
 def active_window(): 
     user32 = ctypes.WinDLL('user32', use_last_error=True)
@@ -123,7 +163,8 @@ def find_max_png(directory):
 
 if __name__ == "__main__":
     counter = find_max_png(path)
-    run_timer()
+    # relaunch timer when file is loaded
+    run_screenshot_timer()
     global blender_id
     blender_id = active_window()
     register()
